@@ -15,6 +15,11 @@
             background-size: cover;
             background-position: center;
         }
+        /* Animasi Modal */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: opacity 0.3s, transform 0.3s; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: opacity 0.2s, transform 0.2s; }
     </style>
 </head>
 <body>
@@ -150,7 +155,17 @@
                                     <p class="text-xs text-gray-400">Harga per bulan</p>
                                     <p class="text-green-600 font-bold text-lg">Rp {{ number_format($rank['kost']->price_per_month, 0, ',', '.') }}</p>
                                 </div>
-                                <button class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                                <button onclick="openModal(this)"
+                                        data-name="{{ $rank['kost']->name }}"
+                                        data-image="{{ $rank['kost']->gambar_url }}"
+                                        data-price="Rp {{ number_format($rank['kost']->price_per_month, 0, ',', '.') }}"
+                                        data-address="{{ $rank['kost']->address }}"
+                                        data-distance="{{ $rank['kost']->distance ?? '-' }}"
+                                        data-size="{{ $rank['kost']->room_size ?? '-' }}"
+                                        data-facilities="{{ $rank['kost']->facilities ?? '-' }}"
+                                        data-desc="{{ $rank['kost']->description ?? 'Tidak ada deskripsi.' }}"
+                                        data-owner="{{ $rank['kost']->owner->name ?? 'Pemilik' }}"
+                                        class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg text-sm font-semibold transition cursor-pointer">
                                     Detail
                                 </button>
                             </div>
@@ -160,6 +175,111 @@
             </div>
         @endif
     </div>
+
+    <div id="detailModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity backdrop-blur-sm" onclick="closeModal()"></div>
+
+        <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-gray-100">
+                
+                <button onclick="closeModal()" class="absolute top-4 right-4 z-10 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+
+                <div class="h-64 w-full overflow-hidden bg-gray-100">
+                    <img id="modalImage" src="" alt="Kosan" class="w-full h-full object-cover">
+                </div>
+
+                <div class="px-6 py-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 id="modalName" class="text-2xl font-bold text-gray-900 leading-tight">Nama Kosan</h3>
+                            <p id="modalAddress" class="text-gray-500 text-sm mt-1"><i class="fa-solid fa-location-dot text-red-500"></i> Alamat</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-500">Harga per bulan</p>
+                            <p id="modalPrice" class="text-2xl font-bold text-green-600">Rp 0</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 bg-blue-50 p-4 rounded-lg">
+                        <div class="text-center">
+                            <i class="fa-solid fa-ruler-combined text-blue-500 mb-1 block"></i>
+                            <span class="text-xs text-gray-500">Ukuran</span>
+                            <p id="modalSize" class="font-semibold text-gray-700">-</p>
+                        </div>
+                        <div class="text-center">
+                            <i class="fa-solid fa-person-walking text-blue-500 mb-1 block"></i>
+                            <span class="text-xs text-gray-500">Jarak</span>
+                            <p id="modalDistance" class="font-semibold text-gray-700">-</p>
+                        </div>
+                        <div class="text-center">
+                            <i class="fa-solid fa-user-tie text-blue-500 mb-1 block"></i>
+                            <span class="text-xs text-gray-500">Pemilik</span>
+                            <p id="modalOwner" class="font-semibold text-gray-700">-</p>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h4 class="font-bold text-gray-800 text-sm mb-2 uppercase tracking-wide">Fasilitas & Detail</h4>
+                        <p id="modalFacilities" class="text-sm text-blue-600 font-medium mb-2 bg-blue-50 inline-block px-3 py-1 rounded-full">-</p>
+                        <p id="modalDesc" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
+                    </div>
+
+                    <div class="mt-6 flex gap-3">
+                        <a href="https://wa.me/" target="_blank" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-center transition shadow-md flex justify-center items-center gap-2">
+                            <i class="fa-brands fa-whatsapp text-xl"></i> Hubungi Pemilik
+                        </a>
+                        <button onclick="closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-lg transition">
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('detailModal');
+
+        function openModal(button) {
+            // Ambil data dari atribut tombol
+            const name = button.getAttribute('data-name');
+            const image = button.getAttribute('data-image');
+            const price = button.getAttribute('data-price');
+            const address = button.getAttribute('data-address');
+            const distance = button.getAttribute('data-distance');
+            const size = button.getAttribute('data-size');
+            const facilities = button.getAttribute('data-facilities');
+            const desc = button.getAttribute('data-desc');
+            const owner = button.getAttribute('data-owner');
+
+            // Isi data ke dalam elemen Modal
+            document.getElementById('modalName').innerText = name;
+            document.getElementById('modalImage').src = image;
+            document.getElementById('modalPrice').innerText = price;
+            document.getElementById('modalAddress').innerHTML = '<i class="fa-solid fa-location-dot text-red-500 mr-1"></i> ' + address;
+            document.getElementById('modalDistance').innerText = distance + ' meter';
+            document.getElementById('modalSize').innerText = size + ' m²';
+            document.getElementById('modalFacilities').innerText = facilities;
+            document.getElementById('modalDesc').innerText = desc;
+            document.getElementById('modalOwner').innerText = owner;
+
+            // Tampilkan Modal
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+
+        // Tutup modal jika tombol Esc ditekan
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                closeModal();
+            }
+        });
+    </script>
 
     <footer class="bg-white border-t border-gray-200 mt-12 py-8 text-center text-gray-500 text-sm">
         <p>&copy; {{ date('Y') }} SPK Kosan Cibogo. Dibuat dengan Laravel & SAW.</p>
