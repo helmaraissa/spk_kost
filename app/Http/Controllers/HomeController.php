@@ -11,31 +11,57 @@ class HomeController extends Controller
 {
     /**
      * Menampilkan halaman depan (Landing Page)
-     * Sekaligus melakukan perhitungan SPK SAW
+     * Sekaligus melakukan perhitungan SPK SAW dengan Filter
      */
-    public function index()
+    public function index(Request $request)
     {
-        // 1. Ambil Kosan yang statusnya sudah Approved
-        // Kita juga load relasi 'evaluations' agar query efisien
-        $kosts = Kost::with('evaluations', 'owner')
-                     ->where('status', 'approved')
-                     ->get();
+        // 1. Mulai Query Kosan
+        $query = Kost::with('evaluations', 'owner')
+                     ->where('status', 'approved');
 
-        // Jika tidak ada data, kirim array kosong
+        // --- LOGIKA FILTER (Baru) ---
+        
+        // Filter Harga (Maksimal)
+        if ($request->filled('filter_harga')) {
+            $query->where('price_per_month', '<=', $request->filter_harga);
+        }
+
+        // Filter Jarak (Maksimal)
+        // Asumsi: Kamu punya kolom 'distance' di tabel 'kosts' (dalam meter)
+        if ($request->filled('filter_jarak')) {
+            $query->where('distance', '<=', $request->filter_jarak);
+        }
+
+        // Filter Fasilitas
+        // Asumsi: Kamu punya kolom 'facilities' (text/string) yang berisi daftar fasilitas
+        if ($request->filled('filter_fasilitas')) {
+            $query->where('facilities', 'like', '%' . $request->filter_fasilitas . '%');
+        }
+
+        // Eksekusi Query
+        $kosts = $query->get();
+
+        // Jika hasil filter kosong, kembalikan view kosong
         if ($kosts->isEmpty()) {
-            // Perhatikan: view yang dipanggil adalah 'welcome', BUKAN 'home'
             return view('welcome', ['ranks' => []]);
         }
+
+        // --- MULAI PERHITUNGAN SAW ---
 
         // 2. Ambil Semua Kriteria
         $criterias = Criteria::all();
 
         // 3. Cari Nilai Max/Min untuk Normalisasi
-        // Min untuk Cost (Harga, Jarak), Max untuk Benefit (Fasilitas, Luas)
+        // Penting: Kita hitung Max/Min hanya dari data yang sudah difilter ($kosts)
+        // agar perbandingannya relevan dengan hasil pencarian user.
         $normalizationFactors = [];
+        
+        // Ambil ID kosan yang lolos filter
+        $filteredKostIds = $kosts->pluck('kost_id');
+
         foreach ($criterias as $c) {
-            // Ambil semua nilai evaluasi untuk kriteria ini dari kosan yang approved
-            $values = Evaluation::whereIn('kost_id', $kosts->pluck('kost_id'))
+            // Ambil nilai evaluasi hanya dari kosan yang lolos filter
+            $values = Evaluation::whereIn('kost_id', $filteredKostIds)
                                 ->where('criteria_id', $c->criteria_id)
                                 ->pluck('value')
                                 ->toArray();
@@ -58,7 +84,7 @@ class HomeController extends Controller
             $totalScore = 0;
 
             foreach ($criterias as $c) {
-                // Cari nilai evaluasi kosan ini untuk kriteria ini
+                // Cari nilai evaluasi kosan ini
                 $eval = $kost->evaluations->where('criteria_id', $c->criteria_id)->first();
                 $nilaiAwal = $eval ? $eval->value : 0;
                 $factor = $normalizationFactors[$c->criteria_id] ?? 0;
@@ -71,14 +97,14 @@ class HomeController extends Controller
                     $normalisasi = ($nilaiAwal == 0) ? 0 : $factor / $nilaiAwal;
                 } else {
                     // Benefit: Nilai / Max
-                    $normalisasi = $nilaiAwal / $factor;
+                    $normalisasi = ($factor == 0) ? 0 : $nilaiAwal / $factor;
                 }
 
-                // Rumus Perankingan: Normalisasi * Bobot
+                // Rumus Akhir: Normalisasi * Bobot
                 $totalScore += $normalisasi * $c->weight;
             }
 
-            // Simpan hasil ke array
+            // Simpan hasil
             $ranks[] = [
                 'kost' => $kost,
                 'score' => $totalScore
@@ -90,13 +116,8 @@ class HomeController extends Controller
             return $b['score'] <=> $a['score'];
         });
 
-        // 6. Tampilkan ke view 'welcome'
+        // 6. Tampilkan ke view
+        // Kita juga kirim data request agar form filter tetap terisi setelah submit (opsional)
         return view('welcome', compact('ranks'));
-    }
-
-    // Fitur Search (Opsional)
-    public function search(Request $request) 
-    {
-        return redirect()->route('home');
     }
 }
